@@ -9,6 +9,7 @@ from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 from functools import partial
 import pickle
+import re
 """
 # Create a VLC instance
 vlc_instance = vlc.Instance()
@@ -67,6 +68,7 @@ class VideoData:
 
     def Getvideo(self):
         self.name = fd.askopenfilename() 
+
         print(self.name)
     def play_video(self):
         self.media = self.vlc_instance.media_new(self.name)
@@ -92,27 +94,34 @@ class VLC_Reader:
 
     def take_screenshot(self,event):
         screen = self.data.player.video_take_snapshot(0, 'screenshot.png', 0, 0)
+        time = self.data.player.get_time()
         if(screen==0):
             image = Image.open('screenshot.png')
-            return image
-
+            return image,time
+"""
     def on_press(self,key):
-        
         try:
             if key == keyboard.Key.ctrl_l and keyboard.KeyCode.from_char('s'):
                 
                 self.take_screenshot(key)
         except AttributeError:
             pass
+"""
 class canvas_holder:
     def __init__(self) -> None:
         self.canvas=None
-        self.img = None
-        self.text=None
         self.label=None
-        self.tags=None
+        self.data=data()
+        self.img = None
         pass
-
+class data:
+    def __init__(self) -> None:
+        self.imgRaw = None
+        self.text=None
+        self.tags=None
+        self.time = None
+        
+        pass
 class ListArea(tk.Frame):
     def __init__(self, parent):
         tk.Frame.__init__(self, parent)
@@ -126,17 +135,23 @@ class ListArea(tk.Frame):
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor=tk.NW)
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         # add the scrollable frame to the main frame
-        
+        self.onTimeClicked = None
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-    def render_item(self,item,tags=None):
+    def render_item(self,item,time,tags=None):
         d = canvas_holder()
+        d.data.time = time
+        sec =time/1000
+        min = sec//60
+        hour=int( min//60)
+        sec =int(sec%60)
+        min =int(min%60)
+        container =tk.Frame(self.scrollable_frame , bd=5,relief="groove")
+        container.pack(anchor="nw")
         if isinstance(item, str):
-            # if the item is a string, add it as rich text
-            #canvas.create_text(30, 50, text=item, font=('Helvetica 15 bold'),tags= "html")
             
-            label = Text(self.scrollable_frame, relief=FLAT,height=1,width=25)
+            label = Text(container, relief=FLAT,height=1,width=25)
             label.insert(INSERT,item)
             for tag in tagtypes.tagTypes:
                 label.tag_configure(tag.lower(),tagtypes.tagTypes[tag])
@@ -155,6 +170,7 @@ class ListArea(tk.Frame):
                         
                         label.tag_add(tag.lower(),tags[tag][i],tags[tag][i+1])
                 print(label.tag_ranges('bold'))
+           
             label.pack(padx=5,pady=5,fill='both', expand=False)
             
             width = (max(len(line) for line in item.split('\n')))*scaller
@@ -163,16 +179,16 @@ class ListArea(tk.Frame):
             width = 35 if width>35 else width
             height = 8 if height>8 else height
              
-            label.configure(width=width,height=height)
+            label.configure(width=width,height=height,state=DISABLED)
             
             
             
-            d.text = item
+            d.data.text = item
             d.label=label
-            d.tags=tags
+            d.data.tags=tags
             
         elif isinstance(item, Image.Image):
-            canvas= Canvas(self.scrollable_frame, width= 200,height=50)
+            canvas= Canvas(container, width= 200,height=50)
             canvas.pack(padx=5,pady=5)
             d.canvas = canvas    
         
@@ -180,26 +196,39 @@ class ListArea(tk.Frame):
             img = ImageTk.PhotoImage(item)
             id = canvas.create_image(0,0,anchor=NW,image=img)
             d.img= img
+            d.data.imgRaw = item
         else:
             raise TypeError("Item must be either a string or a PIL image.")
+        
+        tk.Button(container,text='{:02d}:{:02d}:{:02d}'.format(hour,min,sec),command=partial(self.onTimeClicked,d.data.time)).pack(side='bottom')
+        
         self.list.append(d)
 
         
         pass
-    def restore(self):
+    def restore(self,parent):
         for item in self.list:
-            
+            container =tk.Frame(self.scrollable_frame , bd=5,relief="groove")
+            container.pack()
+        
 
-            if item.img!=None:
-                canvas= Canvas(self.scrollable_frame, width= 200,height=50)
+            if item.data.imgRaw!=None:
+                ratio =parent.width/ item.data.imgRaw.width
+                item.data.imgRaw = item.data.imgRaw.resize(((int)(item.data.imgRaw.width*ratio), (int)(item.data.imgRaw.height*ratio)), Image.Resampling.LANCZOS)
+                
+                img = ImageTk.PhotoImage(item.data.imgRaw)
+                
+                canvas= Canvas(container, width= img.width()+10,height=img.height()+10)
                 canvas.pack(padx=5,pady=5)   
-                canvas.create_image(0,0,anchor=NW,image=item)
+                canvas.create_image(0,0,anchor=NW,image=img)
+                #canvas.config(height = item.data.imgRaw.height()+10,width = item.data.imgRaw.width()+10)
                 item.canvas = canvas
+                item.img =img
 
-            elif item.text!=None:
-                tags = item.tags
-                string = item.text
-                label = Text(self.scrollable_frame, relief=FLAT,height=1,width=25)
+            elif item.data.text!=None:
+                tags = item.data.tags
+                string = item.data.text
+                label = Text(container, relief=FLAT,height=1,width=25)
                 label.insert(INSERT,string)
                 for tag in tagtypes.tagTypes:
                     label.tag_configure(tag.lower(),tagtypes.tagTypes[tag])
@@ -228,7 +257,13 @@ class ListArea(tk.Frame):
                 
                 label.configure(width=width,height=height)
                 item.label = label
-            
+            sec =item.data.time/1000
+            min = sec//60
+            hour =int( min//60)
+            sec= int(sec % 60)
+            min =int(min % 60)
+            tk.Button(container,text='{:02d}:{:02d}:{:02d}'.format(hour,min,sec),command=partial(self.onTimeClicked,item.data.time)).pack(side='bottom')
+        
             
         pass   
     def edit_item(self,index,data):
@@ -362,7 +397,7 @@ class TextEditorFrame(tk.Frame):
         self.user_input=""
         # Create the text field
         self.text = TextEditor(self)
-        self.text.pack(side="top", fill="x")
+        #self.text.pack(side="top", fill="x")
         
         self.submit_button = ttk.Button(self, text="Enter", command=self.submit_text)
         self.submit_button.pack(side="bottom", padx=5, pady=5,expand=True)
@@ -414,7 +449,8 @@ class TextEditorFrame(tk.Frame):
         textFC.pack(fill=tk.X, padx=0, pady=0,side="right")
           
 
-
+    def open_text(self):
+        self.text.pack(side="top", fill="x")
     def submit_text(self):
         self.user_input = self.text.textArea.get("1.0",'end-1c')
         
@@ -430,7 +466,8 @@ class TextEditorFrame(tk.Frame):
 
     def sel(self,event):
             self.text.tagToggle(event.widget.get().lower())
-          
+
+"""          
 class InputFrame(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
@@ -447,12 +484,12 @@ class InputFrame(tk.Frame):
     # Define a function to be called when the button is clicked
     def submit_text(self):
         user_input = self.text_field.get()
-        user_input = self.text_field.selection_get(type="html")
-        
-
+        user_input = self.text_field.selection_get(type="html")     
+"""
 class APP:
 
     def __init__(self) -> None:
+        self.playlist= ""
         self.width = 400
         self.height = 300
         self.resize_ = False
@@ -468,6 +505,7 @@ class APP:
         
     def create_widgets(self):
         self.listArea = ListArea(self.root)
+        self.listArea.onTimeClicked=self.gotoTime
         self.listArea.pack(side="top",fill="both",expand=True)
 
             # create a frame for the buttons
@@ -478,22 +516,31 @@ class APP:
         self.input = TextEditorFrame()
         self.input.text_event = self.get_text
         self.input.pack(side="left",pady=10)
-        button1 = tk.Button(button_frame, text="select vid", padx=10,command=self.reader.data.Getvideo)
+        button1 = tk.Button(button_frame, text="select vid", padx=10,command=self.Getvideo)
         button1.pack(side="left", padx=10)
-        button2 = tk.Button(button_frame, text="Play vid", padx=10,command=self.reader.data.play_video)
+        button2 = tk.Button(button_frame, text="Play vid", padx=10,command=self.Playvideo)
         button2.pack(side="left", padx=10)
         self.root.bind("<Control-s>", self.take_screen)
         self.root.bind("<Configure>",self.resize)
         #self.root.bind("<ButtonRelease-1>",self.onrelease)
       
+    def Getvideo(self):
+        self.reader.data.Getvideo()
+        self.load_list()
+    def Playvideo(self):
+        self.input.open_text()
+        self.reader.data.play_video()
+    def gotoTime(self,time):
+        print(time)
+        self.reader.data.player.set_time(time)
     def take_screen(self,event):
-        image = self.reader.take_screenshot(event)
-        ratio =self.width/ image.width
+        image,time = self.reader.take_screenshot(event)
         self.data.append(image)
         img = image.copy()
         #img = image.resize(((int)(image.width*ratio), (int)(image.height*ratio)), Image.Resampling.LANCZOS)
-        self.listArea.render_item(img)
+        self.listArea.render_item(img,time)
         self.render_items()
+        self.save_list()
     
     def onrelease(self,event):
         if self.resize_ == True:
@@ -516,7 +563,9 @@ class APP:
     def get_text(self):
         print("User input: ", self.input.user_input)
         self.data.append(self.input.user_input)
-        self.listArea.render_item(self.input.user_input,self.input.tags)
+        time = self.reader.data.player.get_time()
+
+        self.listArea.render_item(self.input.user_input,time,self.input.tags)
         pass    
     def render_items(self):
         #self.listArea.clear_items()
@@ -530,12 +579,29 @@ class APP:
                 self.listArea.edit_item(i,img)
             i+=1  
     def save_list(self):
-        with open("List.pickle", "wb") as f:
-            pickle.dump(self.listArea.list, f)
+        directory = 'files/playlist/'
+        file = str(self.reader.data.media.get_mrl())
+        file = file.split("/")[-1]
+        pattern = r"\.(mp4|avi|mov|mkv|wmv|flv)$"
+        file = re.sub(pattern, "", file)
+        
+        print(file)
+        with open(file+".pickle", "wb") as f:
+            pickle.dump([self.listArea.list[i].data for i in range(len(self.listArea.list))], f)
     def load_list(self):
-        with open("my_obj.pickle", "rb") as f:
-            self.listArea.list = pickle.load(f)
-            self.listArea.restore()
+        directory = 'files/playlist/'
+        file = str(self.reader.data.media.get_mrl())
+        file = file.split("/")[-1]
+        pattern = r"\.(mp4|avi|mov|mkv|wmv|flv)$"
+        file = re.sub(pattern, "", file)
+        
+        with open(file+".pickle", "rb") as f:
+            data=pickle.load(f)
+            for e in data:
+                element = canvas_holder()
+                element.data = e
+                self.listArea.list.append(element)
+            self.listArea.restore(self)
 
     def resize_images(self):
         for image in self.listArea.list:
