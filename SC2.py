@@ -1,3 +1,85 @@
+
+import tkinter as tk
+
+class RichTextRenderer:
+    def __init__(self, canvas_width=600, canvas_height=400, font=('Arial', 12)):
+        self.canvas_width = canvas_width
+        self.canvas_height = canvas_height
+        self.font = font
+
+    def render(self, text, tags):
+        # Create the root window and the canvas widget
+        root = tk.Tk()
+        root.geometry(f'{self.canvas_width}x{self.canvas_height}')
+        canvas = tk.Canvas(root, width=self.canvas_width, height=self.canvas_height, bg='white')
+        canvas.pack()
+
+        # Set up the tags in the text widget
+        text_widget = tk.Text(root, wrap='word', font=self.font, width=self.canvas_width//10, height=self.canvas_height//20)
+        text_widget.pack_forget()  # Pack and immediately forget to avoid the widget being seen
+        for tag_name, tag_positions in tags.items():
+            for pos in tag_positions:
+                start = f'1.0 + {pos[0]}c'
+                end = f'1.0 + {pos[1]}c'
+                text_widget.tag_add(tag_name, start, end)
+
+        # Insert the text into the text widget
+        text_widget.insert('end', text)
+
+        # Get the lines of text in the widget
+        lines = text_widget.get('1.0', 'end').split('\n')
+
+        # Get the tag positions for each line
+        line_tags = {}
+        for tag_name, tag_positions in tags.items():
+            for pos in tag_positions:
+                start, end = pos
+                for i, line in enumerate(lines):
+                    if start < len(line):
+                        if i not in line_tags:
+                            line_tags[i] = {}
+                        if tag_name not in line_tags[i]:
+                            line_tags[i][tag_name] = []
+                        if end <= len(line):
+                            line_tags[i][tag_name].append((start, end))
+                            break
+                        else:
+                            line_tags[i][tag_name].append((start, len(line)))
+                            start = 0
+                            end -= len(line) + 1
+
+        # Draw the text and tags in the canvas widget
+        for i, line in enumerate(lines):
+            y = i * self.font[1] + 5
+            x = 5
+            for tag_name, tag_positions in line_tags.get(i, {}).items():
+                for pos in tag_positions:
+                    start, end = pos
+                    s = f'{i+1}.{start}'
+                    e = f'{i+1}.{end}'
+                    b1 = text_widget.bbox("1.5")
+                    b2=text_widget.bbox(e)
+                    print(b1,b2)
+                    if b1!=None and b2!=None:
+                        x0, y0,_,__ = b1
+                        x1,y1,w1,h1= b2
+                        x1+=w1
+                        y1+=h1
+                        canvas.create_rectangle(x0, y0, x1, y1, outline='red')
+            canvas.create_text(x, y, text=line, anchor='nw', font=self.font)
+
+        # Start the main loop
+        root.mainloop()
+renderer = RichTextRenderer()
+text = 'This is a test sentence. It contains two tags: the first tag and the second tag.'
+tags = {
+    'first_tag': [(25, 34)],
+    'second_tag': [(48, 59)]
+}
+renderer.render(text, tags)
+
+
+
 """
 import tkinter as tk
 
@@ -48,6 +130,7 @@ root.mainloop()
 
 
 
+"""
 """
 from tkinter import *
 from tkinter.filedialog import askopenfilename, asksaveasfilename
@@ -238,3 +321,4 @@ for tagType in tagTypes:
 
 
 root.mainloop()
+"""

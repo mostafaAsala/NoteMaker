@@ -8,6 +8,7 @@ from PIL import ImageTk, Image
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 from functools import partial
+import pickle
 """
 # Create a VLC instance
 vlc_instance = vlc.Instance()
@@ -20,6 +21,39 @@ media = vlc_instance.media_new('path/to/video.mp4')
 # Set the media for the player
 player.set_media(media)
 """
+
+class TagTypes:
+    def __init__(self) -> None:
+        
+        self.fontName = 'Bahnschrift'
+        self.padding = 5
+        self.tagTypes = {
+                # Font Settings
+                'Bold': {'font': f'{self.fontName} 15 bold'},
+                'Italic': {'font': f'{self.fontName} 15 italic'},
+                'Code': {'font': 'Consolas 15', 'background': self.rgbToHex((200, 200, 200))},
+
+                # Sizes
+                'Normal Size': {'font': f'{self.fontName} 15'},
+                'Larger Size': {'font': f'{self.fontName} 25'},
+                'Largest Size': {'font': f'{self.fontName} 35'},
+
+                # Background Colors
+                'No Highlight': {'background': self.rgbToHex((255, 255, 0))},
+                'Highlight Red': {'background': self.rgbToHex((255, 0, 0))},
+                'Highlight Green': {'background':self.rgbToHex((0, 255, 0))},
+                'Highlight Black': {'background': self.rgbToHex((0, 0, 0))},
+
+                # Foreground /  Text Colors
+                'Text White': {'foreground': self.rgbToHex((255, 255, 255))},
+                'Text Grey': {'foreground': self.rgbToHex((200, 200, 200))},
+                'Text Blue': {'foreground': self.rgbToHex((0, 0, 255))},
+                'Text green': {'foreground': self.rgbToHex((0, 255, 0))},
+                'Text Red': {'foreground': self.rgbToHex((255, 0, 0))},
+            }
+    def rgbToHex(self,rgb):
+        return "#%02x%02x%02x" % rgb  
+tagtypes = TagTypes()    
 
 class VideoData:
     def __init__(self) -> None:
@@ -75,7 +109,8 @@ class canvas_holder:
         self.canvas=None
         self.img = None
         self.text=None
-        self.tage=None
+        self.label=None
+        self.tags=None
         pass
 
 class ListArea(tk.Frame):
@@ -91,6 +126,7 @@ class ListArea(tk.Frame):
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor=tk.NW)
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         # add the scrollable frame to the main frame
+        
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
@@ -99,25 +135,45 @@ class ListArea(tk.Frame):
         if isinstance(item, str):
             # if the item is a string, add it as rich text
             #canvas.create_text(30, 50, text=item, font=('Helvetica 15 bold'),tags= "html")
-            print(self.parent.winfo_width())
             
-            
-            label = Text(self.scrollable_frame,font='Bahnschrift 10', relief=FLAT,height=1,bg='green')
+            label = Text(self.scrollable_frame, relief=FLAT,height=1,width=25)
             label.insert(INSERT,item)
+            for tag in tagtypes.tagTypes:
+                label.tag_configure(tag.lower(),tagtypes.tagTypes[tag])
+            
+            scaller = 1
             
             if tags !=None: 
-                
                 for tag in tags:
                     for i in range(0,len(tags[tag]),2):
+                        if(tag=='bold' and scaller==1):
+                            scaller=2
+                        elif tag=='larger size' and scaller<3:
+                            scaller=3
+                        elif tag =='largest size' and scaller<4:
+                            scaller=4
+                        
                         label.tag_add(tag.lower(),tags[tag][i],tags[tag][i+1])
+                print(label.tag_ranges('bold'))
             label.pack(padx=5,pady=5,fill='both', expand=False)
             
-            d.text = label
-            d.tage=tags
+            width = (max(len(line) for line in item.split('\n')))*scaller
+            height = (item.count('\n') + 1)*scaller
+            if width>35: height*=(width//35)*0.8
+            width = 35 if width>35 else width
+            height = 8 if height>8 else height
+             
+            label.configure(width=width,height=height)
+            
+            
+            
+            d.text = item
+            d.label=label
+            d.tags=tags
             
         elif isinstance(item, Image.Image):
             canvas= Canvas(self.scrollable_frame, width= 200,height=50)
-            canvas.pack(padx=10,pady=10)
+            canvas.pack(padx=5,pady=5)
             d.canvas = canvas    
         
             # if the item is an image, add it to the list
@@ -127,7 +183,54 @@ class ListArea(tk.Frame):
         else:
             raise TypeError("Item must be either a string or a PIL image.")
         self.list.append(d)
+
         
+        pass
+    def restore(self):
+        for item in self.list:
+            
+
+            if item.img!=None:
+                canvas= Canvas(self.scrollable_frame, width= 200,height=50)
+                canvas.pack(padx=5,pady=5)   
+                canvas.create_image(0,0,anchor=NW,image=item)
+                item.canvas = canvas
+
+            elif item.text!=None:
+                tags = item.tags
+                string = item.text
+                label = Text(self.scrollable_frame, relief=FLAT,height=1,width=25)
+                label.insert(INSERT,string)
+                for tag in tagtypes.tagTypes:
+                    label.tag_configure(tag.lower(),tagtypes.tagTypes[tag])
+                
+                scaller = 1
+                
+                if tags !=None: 
+                    for tag in tags:
+                        for i in range(0,len(tags[tag]),2):
+                            if(tag=='bold' and scaller==1):
+                                scaller=2
+                            elif tag=='larger size' and scaller<3:
+                                scaller=3
+                            elif tag =='largest size' and scaller<4:
+                                scaller=4
+                            
+                            label.tag_add(tag.lower(),tags[tag][i],tags[tag][i+1])
+                    print(label.tag_ranges('bold'))
+                label.pack(padx=5,pady=5,fill='both', expand=False)
+                
+                width = (max(len(line) for line in string.split('\n')))*scaller
+                height = (string.count('\n') + 1)*scaller
+                if width>35: height*=(width//35)*0.8
+                width = 35 if width>35 else width
+                height = 8 if height>8 else height
+                
+                label.configure(width=width,height=height)
+                item.label = label
+            
+            
+        pass   
     def edit_item(self,index,data):
         if isinstance(data, str):
             pass
@@ -212,17 +315,19 @@ class TextEditor(tk.Frame):
             'Text Red': {'foreground': self.rgbToHex((255, 0, 0))},
         }
         self.textsetting = {'Bold':'B','Italic':'I','Code':'C'}
-        self.textSize = ['Normal Size','Larger Size','Largest Size']
-        self.BC = ['Highlight','Highlight Red','Highlight Green','Highlight Black']
-        self.FC = ['Text White','Text Grey','Text Blue','Text green','Text Red']
+        self.textSize = {'Normal Size':'normal','Larger Size':'medium','Largest Size':'large'}
+        self.BC = {'Highlight':'none','Highlight Red':'red','Highlight Green':'green','Highlight Black':'black'}
+        self.FC = {'Text White':'white','Text Grey':'grey','Text Blue':'blue','Text green':'green','Text Red':'red'}
 
         
-        self.textArea = Text(self, font=f'{self.fontName} 15', relief=FLAT,height=3)
+        self.textArea = Text(self, font=f'{self.fontName} 15', relief=FLAT,height=2)
         self.textArea.pack(fill=BOTH, expand=TRUE, padx=self.padding, pady=self.padding)
         self.textArea.bind("<Key>", self.keyDown)
-
+        self.textArea.bind('<FocusIn>',self.on_select)
         self.resetTags()
-
+    def on_select(self,event):
+        print("select")
+        pass
 
         # Transform rgb to hex
     def rgbToHex(self,rgb):
@@ -258,44 +363,71 @@ class TextEditorFrame(tk.Frame):
         # Create the text field
         self.text = TextEditor(self)
         self.text.pack(side="top", fill="x")
-
+        
+        self.submit_button = ttk.Button(self, text="Enter", command=self.submit_text)
+        self.submit_button.pack(side="bottom", padx=5, pady=5,expand=True)
+        self.text_event = None
         # Create the formatting buttons and combobox
+        comwidth =4
+        self.whole = tk.Frame(self)
+        self.text.textArea.bind("<FocusIn>",lambda event: self.whole.pack())
+
         for tagtype in self.text.textsetting:
-            button = ttk.Button(self, text=self.text.textsetting[tagtype], width=3, command=partial(self.text.tagToggle, tagName=tagtype.lower()))
+            button = ttk.Button(self.whole, text=self.text.textsetting[tagtype], width=3, command=partial(self.text.tagToggle, tagName=tagtype.lower()))
             button.pack(side="right", padx=5, pady=5)
         
+        f=tk.Frame(self.whole)
+        f.pack(fill=tk.X, padx=5, pady=5,side="right")
         
+        self.selected_BC = tk.StringVar()   
+        l=tk.Label(f,text="size")
+        l.pack(fill=tk.X, padx=0, pady=0,side="top")
+
         self.selected_size = tk.StringVar()   
-        textSize = ttk.Combobox(self,values = self.text.textSize ,width=10,textvariable = self.selected_size)
+        textSize = ttk.Combobox(f,values = [self.text.textSize[t]for t in self.text.textSize] ,width=comwidth,textvariable = self.selected_size)
         textSize.bind('<<ComboboxSelected>>', self.sel)
         textSize.current(0)
-        textSize.pack(fill=tk.X, padx=5, pady=5,side="right")
-
-        self.selected_BC = tk.StringVar()    
-        textBC = ttk.Combobox(self,values = self.text.BC,width=10 ,textvariable = self.selected_BC)
+        textSize.pack(fill=tk.X, padx=0, pady=0,side="right")
+        
+        f=tk.Frame(self.whole)
+        f.pack(fill=tk.X, padx=5, pady=5,side="right")
+        self.selected_BC = tk.StringVar()   
+        l=tk.Label(f,text="back")
+        l.pack(fill=tk.X, padx=0, pady=0,side="top")
+        
+        textBC = ttk.Combobox(f,values =[self.text.BC[t]for t in self.text.BC] ,width=comwidth ,textvariable = self.selected_BC)
         textBC.bind('<<ComboboxSelected>>', self)
         textBC.current(0)
-        textBC.pack(fill=tk.X, padx=5, pady=5,side="right")
-
+        textBC.pack(fill=tk.X, padx=0, pady=0,side="top")
+        
+        
+        f=tk.Frame(self.whole)
+        f.pack(fill=tk.X, padx=5, pady=5,side="right")
+        self.selected_BC = tk.StringVar()   
+        l=tk.Label(f,text="fore")
+        l.pack(fill=tk.X, padx=0, pady=0,side="top")
 
         self.selected_FC = tk.StringVar()    
-        textFC = ttk.Combobox(self,values = self.text.FC,width=10 ,textvariable = self.selected_FC)
+        textFC = ttk.Combobox(f,values = [self.text.FC[t]for t in self.text.FC],width=comwidth ,textvariable = self.selected_FC)
         textFC.bind('<<ComboboxSelected>>', self)
         textFC.current(0)
-        textFC.pack(fill=tk.X, padx=5, pady=5,side="right")
+        textFC.pack(fill=tk.X, padx=0, pady=0,side="right")
           
 
-        self.submit_button = ttk.Button(self, text="Enter", command=self.submit_text)
-        self.submit_button.pack(side="left", padx=5, pady=5)
-        self.text_event = None
 
     def submit_text(self):
         self.user_input = self.text.textArea.get("1.0",'end-1c')
+        
+        if(self.user_input==""):
+            return
         self.tags = {}
         for tagname in self.text.textArea.tag_names():
             self.tags[tagname] = self.text.textArea.tag_ranges(tagname)
-            
+        self.whole.pack_forget()  
         self.text_event()
+        self.text.textArea.delete('1.0','end')
+        self.text.resetTags()
+
     def sel(self,event):
             self.text.tagToggle(event.widget.get().lower())
           
@@ -336,7 +468,7 @@ class APP:
         
     def create_widgets(self):
         self.listArea = ListArea(self.root)
-        self.listArea.pack(side="top",expand=True)
+        self.listArea.pack(side="top",fill="both",expand=True)
 
             # create a frame for the buttons
         button_frame = tk.Frame(self.root)
@@ -377,9 +509,9 @@ class APP:
     def resize(self,event):
         if type(event.widget) == type(self.root):
             self.height = event.height
-            if(self.width!=event.width-30):
+            if(self.width!=event.width-50):
                 self.resize_ = False
-                self.width = event.width-30
+                self.width = event.width-50
                 self.render_items()
     def get_text(self):
         print("User input: ", self.input.user_input)
@@ -397,6 +529,13 @@ class APP:
                 img = ImageTk.PhotoImage(image)
                 self.listArea.edit_item(i,img)
             i+=1  
+    def save_list(self):
+        with open("List.pickle", "wb") as f:
+            pickle.dump(self.listArea.list, f)
+    def load_list(self):
+        with open("my_obj.pickle", "rb") as f:
+            self.listArea.list = pickle.load(f)
+            self.listArea.restore()
 
     def resize_images(self):
         for image in self.listArea.list:
