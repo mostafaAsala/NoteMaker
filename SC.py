@@ -10,6 +10,9 @@ from tkinter.scrolledtext import ScrolledText
 from functools import partial
 import pickle
 import re
+import os
+import subprocess
+from reportlab.pdfgen import canvas as pdfcanvas
 """
 # Create a VLC instance
 vlc_instance = vlc.Instance()
@@ -68,11 +71,10 @@ class VideoData:
 
     def Getvideo(self):
         self.name = fd.askopenfilename() 
-
-        print(self.name)
-    def play_video(self):
         self.media = self.vlc_instance.media_new(self.name)
         self.player.set_media(self.media)
+        print(self.name)
+    def play_video(self):
         self.player.play()
     def Select_video(self):
         self.Getvideo()
@@ -188,12 +190,13 @@ class ListArea(tk.Frame):
             d.data.tags=tags
             
         elif isinstance(item, Image.Image):
-            canvas= Canvas(container, width= 200,height=50)
+            
+            # if the item is an image, add it to the list
+            img = ImageTk.PhotoImage(item)
+            canvas= Canvas(container ,width= img.width()+10,height=img.height()+10)
             canvas.pack(padx=5,pady=5)
             d.canvas = canvas    
         
-            # if the item is an image, add it to the list
-            img = ImageTk.PhotoImage(item)
             id = canvas.create_image(0,0,anchor=NW,image=img)
             d.img= img
             d.data.imgRaw = item
@@ -520,6 +523,8 @@ class APP:
         button1.pack(side="left", padx=10)
         button2 = tk.Button(button_frame, text="Play vid", padx=10,command=self.Playvideo)
         button2.pack(side="left", padx=10)
+        button3 = tk.Button(button_frame, text="save PDF", padx=10,command=self.export_as_pdf)
+        button3.pack(side="left", padx=10)
         self.root.bind("<Control-s>", self.take_screen)
         self.root.bind("<Configure>",self.resize)
         #self.root.bind("<ButtonRelease-1>",self.onrelease)
@@ -537,7 +542,8 @@ class APP:
         image,time = self.reader.take_screenshot(event)
         self.data.append(image)
         img = image.copy()
-        #img = image.resize(((int)(image.width*ratio), (int)(image.height*ratio)), Image.Resampling.LANCZOS)
+        ratio = ratio =self.width/ image.width
+        img = image.resize(((int)(image.width*ratio), (int)(image.height*ratio)), Image.Resampling.LANCZOS)
         self.listArea.render_item(img,time)
         self.render_items()
         self.save_list()
@@ -578,31 +584,42 @@ class APP:
                 img = ImageTk.PhotoImage(image)
                 self.listArea.edit_item(i,img)
             i+=1  
+    
+    def getDir(self):
+        directory = 'files'
+        file = str(self.reader.data.player.get_media().get_mrl())
+        file = file.split("/")[-1]
+        pattern = r"\.(mp4|avi|mov|mkv|wmv|flv)$"
+        file = re.sub(pattern, "", file)
+        file = directory+"/"+file+'.pickle'
+        return file
+        
     def save_list(self):
-        directory = 'files/playlist/'
-        file = str(self.reader.data.media.get_mrl())
-        file = file.split("/")[-1]
-        pattern = r"\.(mp4|avi|mov|mkv|wmv|flv)$"
-        file = re.sub(pattern, "", file)
-        
-        print(file)
-        with open(file+".pickle", "wb") as f:
+        file = self.getDir()
+        with open(file, "wb") as f:
             pickle.dump([self.listArea.list[i].data for i in range(len(self.listArea.list))], f)
+    
     def load_list(self):
-        directory = 'files/playlist/'
-        file = str(self.reader.data.media.get_mrl())
-        file = file.split("/")[-1]
-        pattern = r"\.(mp4|avi|mov|mkv|wmv|flv)$"
-        file = re.sub(pattern, "", file)
-        
-        with open(file+".pickle", "rb") as f:
+        file = self.getDir()
+        with open(file, "rb") as f:
             data=pickle.load(f)
             for e in data:
                 element = canvas_holder()
                 element.data = e
                 self.listArea.list.append(element)
             self.listArea.restore(self)
-
+    def export_as_pdf(self):
+        canvas = self.listArea.canvas
+        pdf_canvas = pdfcanvas.Canvas("output.pdf")
+        canvas.postscript(file="output.ps", colormode='color')
+        #process = subprocess.Popen(["ps2pdf", "tmp.ps", "result.pdf"], shell=True)
+        #process.wait()
+        #os.remove("tmp.ps")
+        
+        pdf_canvas.drawInlineImage("output.ps", 0, 0)
+        pdf_canvas.save()
+        
+        
     def resize_images(self):
         for image in self.listArea.list:
             if(isinstance(image, Image.Image)):
