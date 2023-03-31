@@ -111,6 +111,7 @@ class VLC_Reader:
 """
 class canvas_holder:
     def __init__(self) -> None:
+        self.container=None
         self.canvas=None
         self.label=None
         self.data=data()
@@ -140,8 +141,28 @@ class ListArea(tk.Frame):
         self.onTimeClicked = None
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.pdfCanvas=None    
+
+    def print_pdf(self,page_width):
+        self.pdfCanvas = tk.Canvas(width=page_width,height=5000)
         
-    def render_item(self,item,time,tags=None):
+        for item in self.list:
+            if item.label!=None:
+                label = Text( relief=FLAT,height=1,width=25)
+                label.insert(INSERT,item.data.text)
+                for tag in tagtypes.tagTypes:
+                    label.tag_configure(tag.lower(),tagtypes.tagTypes[tag])
+            
+                label.config(wrap="word")
+                for tag in item.data.tags:
+                    label.tag_add(tag.lower())
+                    for tag in 
+                    pass
+
+                pass
+        pass
+    def render_item(self,item,time,width=None,tags=None):
+        print(type(item))
         d = canvas_holder()
         d.data.time = time
         sec =time/1000
@@ -149,11 +170,26 @@ class ListArea(tk.Frame):
         hour=int( min//60)
         sec =int(sec%60)
         min =int(min%60)
+        index=0
+        for i in range(len(item.data.text,self.list)):
+            if time>self.list[i].data.time:
+                index=i+1
+            else :
+                break
+        
+
+        self.list.insert(index,d)        
         container =tk.Frame(self.scrollable_frame , bd=5,relief="groove")
-        container.pack(anchor="nw")
+        d.container = container
+        
+        container.pack()
+        container.pack_configure(after=self.list[index-1].container)
+       
+       
         if isinstance(item, str):
             
             label = Text(container, relief=FLAT,height=1,width=25)
+            
             label.insert(INSERT,item)
             for tag in tagtypes.tagTypes:
                 label.tag_configure(tag.lower(),tagtypes.tagTypes[tag])
@@ -171,10 +207,8 @@ class ListArea(tk.Frame):
                             scaller=4
                         
                         label.tag_add(tag.lower(),tags[tag][i],tags[tag][i+1])
-                print(label.tag_ranges('bold'))
-           
+                #print(label.tag_ranges('bold'))
             label.pack(padx=5,pady=5,fill='both', expand=False)
-            
             width = (max(len(line) for line in item.split('\n')))*scaller
             height = (item.count('\n') + 1)*scaller
             if width>35: height*=(width//35)*0.8
@@ -190,12 +224,15 @@ class ListArea(tk.Frame):
             d.data.tags=tags
             
         elif isinstance(item, Image.Image):
-            
+            ratio = width/ item.width
+            img_re = item.resize(((int)(item.width*ratio), (int)(item.height*ratio)), Image.Resampling.LANCZOS)
+        
             # if the item is an image, add it to the list
-            img = ImageTk.PhotoImage(item)
+            img = ImageTk.PhotoImage(img_re)
             canvas= Canvas(container ,width= img.width()+10,height=img.height()+10)
             canvas.pack(padx=5,pady=5)
             d.canvas = canvas    
+
         
             id = canvas.create_image(0,0,anchor=NW,image=img)
             d.img= img
@@ -203,10 +240,9 @@ class ListArea(tk.Frame):
         else:
             raise TypeError("Item must be either a string or a PIL image.")
         
-        tk.Button(container,text='{:02d}:{:02d}:{:02d}'.format(hour,min,sec),command=partial(self.onTimeClicked,d.data.time)).pack(side='bottom')
+        b = tk.Button(container,text='{:02d}:{:02d}:{:02d}'.format(hour,min,sec),command=partial(self.onTimeClicked,d.data.time)).pack(side='bottom')
         
-        self.list.append(d)
-
+        
         
         pass
     def restore(self,parent):
@@ -217,9 +253,9 @@ class ListArea(tk.Frame):
 
             if item.data.imgRaw!=None:
                 ratio =parent.width/ item.data.imgRaw.width
-                item.data.imgRaw = item.data.imgRaw.resize(((int)(item.data.imgRaw.width*ratio), (int)(item.data.imgRaw.height*ratio)), Image.Resampling.LANCZOS)
+                im= item.data.imgRaw.resize(((int)(item.data.imgRaw.width*ratio), (int)(item.data.imgRaw.height*ratio)), Image.Resampling.LANCZOS)
                 
-                img = ImageTk.PhotoImage(item.data.imgRaw)
+                img = ImageTk.PhotoImage(im)
                 
                 canvas= Canvas(container, width= img.width()+10,height=img.height()+10)
                 canvas.pack(padx=5,pady=5)   
@@ -249,7 +285,7 @@ class ListArea(tk.Frame):
                                 scaller=4
                             
                             label.tag_add(tag.lower(),tags[tag][i],tags[tag][i+1])
-                    print(label.tag_ranges('bold'))
+                    #print(label.tag_ranges('bold'))
                 label.pack(padx=5,pady=5,fill='both', expand=False)
                 
                 width = (max(len(line) for line in string.split('\n')))*scaller
@@ -268,8 +304,22 @@ class ListArea(tk.Frame):
             tk.Button(container,text='{:02d}:{:02d}:{:02d}'.format(hour,min,sec),command=partial(self.onTimeClicked,item.data.time)).pack(side='bottom')
         
             
-        pass   
-    def edit_item(self,index,data):
+        pass  
+    def edit_items(self,width):
+        
+        for item in self.list:
+            if isinstance(item.img, ImageTk.PhotoImage):
+                #print("text")
+                ratio =width/ item.data.imgRaw.width
+                
+                im =item.data.imgRaw.resize(((int)(item.data.imgRaw.width*ratio), (int)(item.data.imgRaw.height*ratio)), Image.Resampling.LANCZOS)
+                item.img = ImageTk.PhotoImage(im)
+                item.canvas.delete("all")
+                item.canvas.create_image(10, 10, anchor=NW, image=item.img)
+                item.canvas.config(height = item.img.height()+10,width = item.img.width()+10)
+                   
+        pass 
+    def edit_item(self,index,data,):
         if isinstance(data, str):
             pass
             #self.list[index].itemconfig(1, text = data)
@@ -542,9 +592,7 @@ class APP:
         image,time = self.reader.take_screenshot(event)
         self.data.append(image)
         img = image.copy()
-        ratio = ratio =self.width/ image.width
-        img = image.resize(((int)(image.width*ratio), (int)(image.height*ratio)), Image.Resampling.LANCZOS)
-        self.listArea.render_item(img,time)
+        self.listArea.render_item(img,time,self.width)
         self.render_items()
         self.save_list()
     
@@ -574,16 +622,8 @@ class APP:
         self.listArea.render_item(self.input.user_input,time,self.input.tags)
         pass    
     def render_items(self):
-        #self.listArea.clear_items()
-        i=0
-        for image in self.data:
-
-            if(isinstance(image, Image.Image)):
-                ratio =self.width/ image.width
-                image = image.resize(((int)(image.width*ratio), (int)(image.height*ratio)), Image.Resampling.LANCZOS)
-                img = ImageTk.PhotoImage(image)
-                self.listArea.edit_item(i,img)
-            i+=1  
+        self.listArea.edit_items(self.width)
+              
     
     def getDir(self):
         directory = 'files'
