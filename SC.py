@@ -1,8 +1,9 @@
 import vlc
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import filedialog as fd 
 from pynput import keyboard
-
+import tempfile
 from tkinter import *
 from PIL import ImageTk, Image
 from tkinter import ttk
@@ -12,7 +13,11 @@ import pickle
 import re
 import os
 import subprocess
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as pdfcanvas
+from reportlab.lib.pagesizes import letter
+from fpdf import FPDF
+import io
 """
 # Create a VLC instance
 vlc_instance = vlc.Instance()
@@ -125,6 +130,8 @@ class data:
         self.time = None
         
         pass
+
+    
 class ListArea(tk.Frame):
     def __init__(self, parent):
         tk.Frame.__init__(self, parent)
@@ -144,23 +151,90 @@ class ListArea(tk.Frame):
         self.pdfCanvas=None    
 
     def print_pdf(self,page_width):
-        self.pdfCanvas = tk.Canvas(width=page_width,height=5000)
+        self.canvasimgs=[]
+        cummulative_ehight = 0
+        i=0
+        root2 = Toplevel(self.parent)
+
+        self.pdfCanvas = tk.Canvas(root2,width=page_width,height=1600,background="red")
+        self.pdfCanvas.pack()
         
+        print("printing...")
+        print("item count:{} ".format(len(self.list)))
         for item in self.list:
+            print(i)
+            i+=1
             if item.label!=None:
-                label = Text( relief=FLAT,height=1,width=25)
+                text_canvas = tk.Canvas(self.pdfCanvas, width=400, height=400, bg='white')
+                
+                label = Text(text_canvas, wrap='word', relief=FLAT,height=1,width=25)
                 label.insert(INSERT,item.data.text)
                 for tag in tagtypes.tagTypes:
                     label.tag_configure(tag.lower(),tagtypes.tagTypes[tag])
             
                 label.config(wrap="word")
-                for tag in item.data.tags:
-                    label.tag_add(tag.lower())
-                    for tag in 
-                    pass
+                scaller=1
+                if item.data.tags !=None: 
+                    for tag in item.data.tags:
+                        for i in range(0,len(item.data.tags[tag]),2):
+                            if(tag=='bold' and scaller==1):
+                                scaller=2
+                            elif tag=='larger size' and scaller<3:
+                                scaller=3
+                            elif tag =='largest size' and scaller<4:
+                                scaller=4
+                            
+                            label.tag_add(tag.lower(),item.data.tags[tag][i],item.data.tags[tag][i+1])
+                width = (max(len(line) for line in item.data.text.split('\n')))*scaller
+            
+                height = (item.data.text.count('\n') + 1)*scaller
+                if width>page_width: height*=(width//page_width)*0.8
+                width = page_width if width>page_width else width
+                label.pack(fill='both', expand=True)
+                text_canvas.create_window(0, 0, window=label, anchor='nw')
+               
 
-                pass
-        pass
+                label.configure(width=width,height=height,state=DISABLED)
+                self.pdfCanvas.create_window(5,cummulative_ehight,width=label.winfo_width(),height=label.winfo_height(),anchor=NW,window=text_canvas)
+                cummulative_ehight+=label.winfo_height()
+            elif item.img!=None:
+                ratio = page_width/ item.data.imgRaw.width
+                img_re = item.data.imgRaw.resize(((int)(item.data.imgRaw.width*ratio), (int)(item.data.imgRaw.height*ratio)), Image.Resampling.LANCZOS)
+            
+                # if the item is an image, add it to the list
+                img = ImageTk.PhotoImage(img_re)
+                self.canvasimgs.append(img)
+                #self.canvasimgs.append(img_re)
+                
+                canvas= Canvas(width= img.width()+10,height=img.height()+10)
+                c= canvas.pack()
+                canvas.create_image(0,0,anchor=NW,image=img)
+                self.pdfCanvas.create_image(5,cummulative_ehight+5,image=img,anchor=NW)
+                
+                #self.pdfCanvas.create_window(0,cummulative_ehight,window=canvas.pack(),anchor=CENTER)
+                cummulative_ehight+=img.height()+10
+                print(cummulative_ehight)
+        #root2.geometry("{}x{}".format(page_width+20,cummulative_ehight))
+        #print(root2.winfo_screenwidth(), root2.winfo_screenheight())
+        #print(root2.winfo_width(),root2.winfo_height())
+        #self.pdfCanvas.configure(height=cummulative_ehight,width=page_width+20)
+        self.pdfCanvas.update()
+        
+        root2.update()
+        self.pdfCanvas.postscript(file="output.ps", colormode='color')
+        img = Image.open("output.ps")
+        img.save("img.png")
+        cmd = ["ps2pdf","-dDEVICEWIDTHPOINTS=800","-dDEVICEHEIGHTPOINTS=1500", "output.ps", "output.pdf"]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        if result.returncode == 0:
+            print('PDF conversion successful')
+        else:
+            print('PDF conversion failed with error message: ', result.stderr.decode('utf-8'))
+        root2.mainloop()
+        
+   
+
     def render_item(self,item,time,width=None,tags=None):
         print(type(item))
         d = canvas_holder()
@@ -171,7 +245,7 @@ class ListArea(tk.Frame):
         sec =int(sec%60)
         min =int(min%60)
         index=0
-        for i in range(len(item.data.text,self.list)):
+        for i in range(len(self.list)):
             if time>self.list[i].data.time:
                 index=i+1
             else :
@@ -246,6 +320,8 @@ class ListArea(tk.Frame):
         
         pass
     def restore(self,parent):
+        print("restoring items.....")
+        print(len(self.list))
         for item in self.list:
             container =tk.Frame(self.scrollable_frame , bd=5,relief="groove")
             container.pack()
@@ -614,12 +690,15 @@ class APP:
                 self.resize_ = False
                 self.width = event.width-50
                 self.render_items()
+                
     def get_text(self):
         print("User input: ", self.input.user_input)
         self.data.append(self.input.user_input)
         time = self.reader.data.player.get_time()
 
         self.listArea.render_item(self.input.user_input,time,self.input.tags)
+        self.render_items()
+        self.save_list()
         pass    
     def render_items(self):
         self.listArea.edit_items(self.width)
@@ -649,15 +728,10 @@ class APP:
                 self.listArea.list.append(element)
             self.listArea.restore(self)
     def export_as_pdf(self):
-        canvas = self.listArea.canvas
-        pdf_canvas = pdfcanvas.Canvas("output.pdf")
-        canvas.postscript(file="output.ps", colormode='color')
-        #process = subprocess.Popen(["ps2pdf", "tmp.ps", "result.pdf"], shell=True)
-        #process.wait()
-        #os.remove("tmp.ps")
+
+        canvas = self.listArea.print_pdf(800)
+        return
         
-        pdf_canvas.drawInlineImage("output.ps", 0, 0)
-        pdf_canvas.save()
         
         
     def resize_images(self):
@@ -690,34 +764,7 @@ class APP:
 
 def main():
     app = APP()
-    """    reader = VLC_Reader()
-    with keyboard.Listener(on_press=reader.on_press) as listener:
-        
-        root = tk.Tk()
-        root.title('Screenshots')
-        root.geometry('400x300')
 
-        # create the listbox to display the screenshots
-        listbox = tk.Listbox(root)
-        reader.listbox=listbox
-        listbox.pack(fill=tk.BOTH, expand=True)
-        print("   cdwsde",len(reader.screenshots))
-        for shot in reader.screenshots:
-            print("image")
-            listbox.insert(END,"")
-            listbox.itemconfig(listbox.size()-1, image=shot)
-
-            pass
-
-        tk.Button(text='Click to Open File', 
-        command=reader.data.Getvideo).pack(fill=tk.X)
-        tk.Button(text='Play Video', 
-        command=reader.data.play_video).pack(fill=tk.X)
-        root.bind("<Control-s>", reader.on_press)
-
-        tk.mainloop()
-    pass
-"""
 
 if __name__=="__main__":
     main()
