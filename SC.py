@@ -146,10 +146,14 @@ class ListArea(tk.Frame):
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         # add the scrollable frame to the main frame
         self.onTimeClicked = None
+        
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.pdfCanvas=None    
+    def onDeleteClicked(self,index):
+        
 
+        pass
     def print_pdf(self,page_width):
         self.canvasimgs=[]
         cummulative_ehight = 0
@@ -157,12 +161,12 @@ class ListArea(tk.Frame):
         root2 = Toplevel(self.parent)
 
         self.pdfCanvas = tk.Canvas(root2,width=page_width,height=1600,background="red")
-        self.pdfCanvas.pack()
+        self.pdfCanvas.pack(expand=True,fill='both')
         
-        print("printing...")
+        print("printing...")    
         print("item count:{} ".format(len(self.list)))
         for item in self.list:
-            print(i)
+            
             i+=1
             if item.label!=None:
                 text_canvas = tk.Canvas(self.pdfCanvas, width=400, height=400, bg='white')
@@ -197,6 +201,7 @@ class ListArea(tk.Frame):
                 label.configure(width=width,height=height,state=DISABLED)
                 self.pdfCanvas.create_window(5,cummulative_ehight,width=label.winfo_width(),height=label.winfo_height(),anchor=NW,window=text_canvas)
                 cummulative_ehight+=label.winfo_height()
+                
             elif item.img!=None:
                 ratio = page_width/ item.data.imgRaw.width
                 img_re = item.data.imgRaw.resize(((int)(item.data.imgRaw.width*ratio), (int)(item.data.imgRaw.height*ratio)), Image.Resampling.LANCZOS)
@@ -209,29 +214,79 @@ class ListArea(tk.Frame):
                 canvas= Canvas(width= img.width()+10,height=img.height()+10)
                 c= canvas.pack()
                 canvas.create_image(0,0,anchor=NW,image=img)
-                self.pdfCanvas.create_image(5,cummulative_ehight+5,image=img,anchor=NW)
                 
+                self.pdfCanvas.configure(height=cummulative_ehight+img.height()+10)
+                self.pdfCanvas.create_image(5,cummulative_ehight+5,image=img,anchor=NW)
                 #self.pdfCanvas.create_window(0,cummulative_ehight,window=canvas.pack(),anchor=CENTER)
                 cummulative_ehight+=img.height()+10
-                print(cummulative_ehight)
-        #root2.geometry("{}x{}".format(page_width+20,cummulative_ehight))
-        #print(root2.winfo_screenwidth(), root2.winfo_screenheight())
-        #print(root2.winfo_width(),root2.winfo_height())
-        #self.pdfCanvas.configure(height=cummulative_ehight,width=page_width+20)
+                
+        root2.maxsize(page_width*2,cummulative_ehight*4)
         self.pdfCanvas.update()
+        root2.geometry("{}x{}".format(int(page_width*1.2),int(cummulative_ehight)))
+        root2.update()
+                
         
+        #print(root2.winfo_screenheight(),root2.winfo_height(),(cummulative_ehight))
         root2.update()
         self.pdfCanvas.postscript(file="output.ps", colormode='color')
         img = Image.open("output.ps")
         img.save("img.png")
-        cmd = ["ps2pdf","-dDEVICEWIDTHPOINTS=800","-dDEVICEHEIGHTPOINTS=1500", "output.ps", "output.pdf"]
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        #with Image.open("output.ps") as img:
+        #    width_pixels,height_pixels= img.size
+        cmd = ["ps2pdf","output.ps","output.pdf"]
+        width_pixels, height_pixels = img.size
 
+        input_file = "output.ps"
+        output_file = "output.pdf"
+        page_width = int(width_pixels*72)  # 8.5 inches in points
+        page_height = int(height_pixels*72) # 11 inches in points
+        """
+        gs_cmd = [
+            "gs",
+            "-sDEVICE=pdfwrite",
+            "-dPDFSETTINGS=/default",
+            "-dNOPAUSE",
+            "-dQUIET",
+            "-dBATCH",
+            f"-dDEVICEWIDTHPOINTS=360",
+            f"-dDEVICEHEIGHTPOINTS=1000",
+            f"-sOutputFile={output_file}",
+            input_file,
+        ]
+        """
+        gs_cmd = ["ps2pdf", "output.ps", "output.pdf","-sPAPERSIZE={},{}".format(page_width,page_height)]
+        #result = subprocess.run(gs_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(gs_cmd,shell=True,stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE)
+        out, err = proc.communicate()
+        
+        print(out)
+        print(err)
+        
+        return
         if result.returncode == 0:
             print('PDF conversion successful')
         else:
             print('PDF conversion failed with error message: ', result.stderr.decode('utf-8'))
         root2.mainloop()
+        return
+        pdf_filename = 'my_pdf_file.pdf'
+        pdf = pdfcanvas.Canvas(pdf_filename,pagesize=(page_width+20,cummulative_ehight))
+        # Calculate the number of pages required to display the canvas content
+        canvas_width = self.pdfCanvas.winfo_width()
+        canvas_height = self.pdfCanvas.winfo_height()
+        page_count = int(canvas_height / cummulative_ehight) + 1
+        # Iterate over each page and draw the canvas content onto it
+        for i in range(page_count):
+            if i > 0:
+                pdf.showPage()
+            y_offset = i * pdf.defaultPageSize[1]
+            pdf.drawInlineImage(canvas.postscript(file='-', colormode='color'), 0, y_offset)
+            self.pdfCanvas.configure(X=0,Y=-pdf.defaultPageSize[1]*i)
+        pdf.save()
+
+        return
         
    
 
@@ -315,17 +370,22 @@ class ListArea(tk.Frame):
             raise TypeError("Item must be either a string or a PIL image.")
         
         b = tk.Button(container,text='{:02d}:{:02d}:{:02d}'.format(hour,min,sec),command=partial(self.onTimeClicked,d.data.time)).pack(side='bottom')
+        dele = tk.Button(container,text='delete',command=partial(self.deletecontainer,d)).pack(side='top')
         
         
         
-        pass
+    def deletecontainer(self,item):
+        item.container.pack_forget()
+        self.list.remove(item)
+        self.parent.update()
+    
     def restore(self,parent):
         print("restoring items.....")
         print(len(self.list))
         for item in self.list:
             container =tk.Frame(self.scrollable_frame , bd=5,relief="groove")
             container.pack()
-        
+            item.container = container
 
             if item.data.imgRaw!=None:
                 ratio =parent.width/ item.data.imgRaw.width
@@ -377,8 +437,11 @@ class ListArea(tk.Frame):
             hour =int( min//60)
             sec= int(sec % 60)
             min =int(min % 60)
-            tk.Button(container,text='{:02d}:{:02d}:{:02d}'.format(hour,min,sec),command=partial(self.onTimeClicked,item.data.time)).pack(side='bottom')
-        
+            f = tk.Frame(container)
+            f.pack(side=BOTTOM)
+            tk.Button(f ,text='{:02d}:{:02d}:{:02d}'.format(hour,min,sec),command=partial(self.onTimeClicked,item.data.time)).pack(side='right',padx=10)
+            dele = tk.Button(f ,text='delete',command=partial(self.deletecontainer,item))
+            dele.pack(side='right',padx=10)
             
         pass  
     def edit_items(self,width):
@@ -407,30 +470,7 @@ class ListArea(tk.Frame):
             
             
 
-    """
-    def render_items(self):
-        self.clear_items()
-        
-        for item in self.list:
-            if isinstance(item, str):
-                # if the item is a string, add it as rich text
-                tk.Label(self.scrollable_frame, text=item).pack(pady=10)
-                
-            elif isinstance(item, Image.Image):
-                # if the item is an image, add it to the list
-                img = ImageTk.PhotoImage(item)
-                label = tk.Label(self.scrollable_frame, image=img)
-                label.image = img
-                label.pack(padx=10, pady=10)
-                
-            else:
-                raise TypeError("Item must be either a string or a PIL image.")
-    
-    def add_item(self, item_new):
-        
-        self.list.append(item_new)
-        self.render_items()
-    """ 
+     
     def clear_items(self):
         # remove all items from the list
         for widget in self.scrollable_frame.winfo_children():
