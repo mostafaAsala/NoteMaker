@@ -1,9 +1,6 @@
 import vlc
 import tkinter as tk
-import tkinter.font as tkfont
 from tkinter import filedialog as fd 
-from pynput import keyboard
-import tempfile
 from tkinter import *
 from PIL import ImageTk, Image
 from tkinter import ttk
@@ -11,13 +8,9 @@ from tkinter.scrolledtext import ScrolledText
 from functools import partial
 import pickle
 import re
-import os
 import subprocess
-from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as pdfcanvas
 from reportlab.lib.pagesizes import letter
-from fpdf import FPDF
-import io
 """
 # Create a VLC instance
 vlc_instance = vlc.Instance()
@@ -291,6 +284,7 @@ class ListArea(tk.Frame):
    
 
     def render_item(self,item,time,width=None,tags=None):
+        print("tags = ",tags)
         print(type(item))
         d = canvas_holder()
         d.data.time = time
@@ -557,8 +551,10 @@ class TextEditor(tk.Frame):
             self.textArea.tag_remove(tagName, start, end)
         else:
             self.textArea.tag_add(tagName, start, end)
+        return "break"
 
-
+def stop_on_ctrl(event):
+        return "break"
 
 class TextEditorFrame(tk.Frame):
     def __init__(self, master=None, **kwargs):
@@ -575,7 +571,11 @@ class TextEditorFrame(tk.Frame):
         comwidth =4
         self.whole = tk.Frame(self)
         self.text.textArea.bind("<FocusIn>",lambda event: self.whole.pack())
-
+        self.text.textArea.bind("<Control-b>", lambda event: self.text.tagToggle('bold'))
+        
+        self.text.textArea.bind("<Control-i>", lambda event: self.text.tagToggle('italic'))
+        self.text.textArea.bind("<Control-h>", lambda event: self.text.tagToggle('code'))
+        
         for tagtype in self.text.textsetting:
             button = ttk.Button(self.whole, text=self.text.textsetting[tagtype], width=3, command=partial(self.text.tagToggle, tagName=tagtype.lower()))
             button.pack(side="right", padx=5, pady=5)
@@ -622,11 +622,12 @@ class TextEditorFrame(tk.Frame):
         self.text.pack(side="top", fill="x")
     def submit_text(self):
         self.user_input = self.text.textArea.get("1.0",'end-1c')
-        
+        self.tags = {}
         if(self.user_input==""):
             return
-        self.tags = {}
+        
         for tagname in self.text.textArea.tag_names():
+            print(tagname)
             self.tags[tagname] = self.text.textArea.tag_ranges(tagname)
         self.whole.pack_forget()  
         self.text_event()
@@ -736,7 +737,7 @@ class APP:
         self.data.append(self.input.user_input)
         time = self.reader.data.player.get_time()
 
-        self.listArea.render_item(self.input.user_input,time,self.input.tags)
+        self.listArea.render_item(self.input.user_input,time,tags=self.input.tags)
         self.render_items()
         self.save_list()
         pass    
@@ -769,7 +770,7 @@ class APP:
             self.listArea.restore(self)
     def export_as_pdf(self):
 
-        canvas = self.listArea.print_pdf(800)
+        canvas = self.listArea.print_pdf(1200)
         return
         
         
