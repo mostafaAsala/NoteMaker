@@ -11,6 +11,8 @@ import re
 import subprocess
 from reportlab.pdfgen import canvas as pdfcanvas
 from reportlab.lib.pagesizes import letter
+from tkinter import Menu
+import os
 """
 # Create a VLC instance
 vlc_instance = vlc.Instance()
@@ -61,7 +63,7 @@ class VideoData:
     def __init__(self) -> None:
         self.directory =""    
         self.name = ""
-        self.vlc_instance = vlc.Instance()
+        self.vlc_instance = vlc.Instance('--no-xlib')
         self.player = self.vlc_instance.media_player_new()
         self.media =""
 
@@ -71,11 +73,20 @@ class VideoData:
         self.name = fd.askopenfilename() 
         self.media = self.vlc_instance.media_new(self.name)
         self.player.set_media(self.media)
+        
         print(self.name)
-    def play_video(self):
+    def play_video(self,frame):
+        self.setWindow(frame)
         self.player.play()
-    def Select_video(self):
+    def setWindow(self,player_frame):
+        player_frame.update()
+        player_handle = player_frame.winfo_id()
+        self.player.set_xwindow(player_handle)
+
+    def Select_video(self,player_frame=None):
         self.Getvideo()
+        if player_frame==None:
+            self.setWindow(player_frame)
         self.play_video()
         pass
 
@@ -91,6 +102,11 @@ class VLC_Reader:
         self.data = VideoData()
         self.rate = 1
         pass
+
+    def changespeed(self,dir):
+        self.rate+=dir/10
+        self.data.player.set_rate(self.rate)
+        
 
     def take_screenshot(self,event):
         screen = self.data.player.video_take_snapshot(0, 'screenshot.png', 0, 0)
@@ -124,10 +140,15 @@ class data:
         
         pass
 
-    
+class VideoPlayerCanvas:
+    def __init__(self,parent):
+        self.window = tk.Toplevel(parent)
+
+        pass    
 class ListArea(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent,app):
         tk.Frame.__init__(self, parent)
+        self.app=app
         self.parent = parent
         self.list =[]
         # create a scrollable frame
@@ -224,7 +245,7 @@ class ListArea(tk.Frame):
         self.pdfCanvas.postscript(file="output.ps", colormode='color')
         img = Image.open("output.ps")
         img.save("img.png")
-        
+        return
         #with Image.open("output.ps") as img:
         #    width_pixels,height_pixels= img.size
         cmd = ["ps2pdf","output.ps","output.pdf"]
@@ -372,6 +393,7 @@ class ListArea(tk.Frame):
         item.container.pack_forget()
         self.list.remove(item)
         self.parent.update()
+        self.app.save_list()
     
     def restore(self,parent):
         print("restoring items.....")
@@ -561,16 +583,19 @@ class TextEditorFrame(tk.Frame):
         super().__init__(master=master, **kwargs)
         self.user_input=""
         # Create the text field
+        self.whole = tk.Frame(self)
+        
         self.text = TextEditor(self)
         #self.text.pack(side="top", fill="x")
-        
-        self.submit_button = ttk.Button(self, text="Enter", command=self.submit_text)
+        self.submit_button = ttk.Button(self.whole, text="Enter", command=self.submit_text)
         self.submit_button.pack(side="bottom", padx=5, pady=5,expand=True)
         self.text_event = None
+        self.focusIn=None
         # Create the formatting buttons and combobox
         comwidth =4
-        self.whole = tk.Frame(self)
-        self.text.textArea.bind("<FocusIn>",lambda event: self.whole.pack())
+        
+        self.text.textArea.bind("<FocusIn>",lambda event: self.onFocus())
+        self.text.textArea.bind("<FocusOut>",lambda event: print("Text widget lost focus"))
         self.text.textArea.bind("<Control-b>", lambda event: self.text.tagToggle('bold'))
         
         self.text.textArea.bind("<Control-i>", lambda event: self.text.tagToggle('italic'))
@@ -578,10 +603,10 @@ class TextEditorFrame(tk.Frame):
         
         for tagtype in self.text.textsetting:
             button = ttk.Button(self.whole, text=self.text.textsetting[tagtype], width=3, command=partial(self.text.tagToggle, tagName=tagtype.lower()))
-            button.pack(side="right", padx=5, pady=5)
+            button.pack(side="right", padx=5)
         
         f=tk.Frame(self.whole)
-        f.pack(fill=tk.X, padx=5, pady=5,side="right")
+        f.pack(fill=tk.X, padx=5,side="right")
         
         self.selected_BC = tk.StringVar()   
         l=tk.Label(f,text="size")
@@ -594,7 +619,7 @@ class TextEditorFrame(tk.Frame):
         textSize.pack(fill=tk.X, padx=0, pady=0,side="right")
         
         f=tk.Frame(self.whole)
-        f.pack(fill=tk.X, padx=5, pady=5,side="right")
+        f.pack(fill=tk.X, padx=5,side="right")
         self.selected_BC = tk.StringVar()   
         l=tk.Label(f,text="back")
         l.pack(fill=tk.X, padx=0, pady=0,side="top")
@@ -617,7 +642,9 @@ class TextEditorFrame(tk.Frame):
         textFC.current(0)
         textFC.pack(fill=tk.X, padx=0, pady=0,side="right")
           
-
+    def onFocus(self):
+        self.focusIn()
+        self.whole.pack()
     def open_text(self):
         self.text.pack(side="top", fill="x")
     def submit_text(self):
@@ -637,25 +664,6 @@ class TextEditorFrame(tk.Frame):
     def sel(self,event):
             self.text.tagToggle(event.widget.get().lower())
 
-"""          
-class InputFrame(tk.Frame):
-    def __init__(self, master=None):
-        super().__init__(master)
-        self.pack()
-
-        # Create a text field for the user input
-        self.text_field = tk.Entry(self)
-        self.text_field.pack(side=tk.LEFT,fill="both",expand=True)
-
-        # Create a button to submit the user input
-        self.submit_button = tk.Button(self, text="Submit", command=self.submit_text)
-        self.submit_button.pack(side=tk.LEFT)
-
-    # Define a function to be called when the button is clicked
-    def submit_text(self):
-        user_input = self.text_field.get()
-        user_input = self.text_field.selection_get(type="html")     
-"""
 class APP:
 
     def __init__(self) -> None:
@@ -665,49 +673,150 @@ class APP:
         self.resize_ = False
         self.redrawFlag=False
         self.root = tk.Tk()
-        self.root.minsize(200,300)
+        self.root.minsize(100,400)
         self.reader = VLC_Reader()
         self.root.title('noteBook')
         self.root.geometry('{}x{}'.format(self.width,self.height))
         self.data = []
+        self.paused = False
+        self.videoOpend=False
         self.create_widgets()
         self.root.mainloop()
         
     def create_widgets(self):
-        self.listArea = ListArea(self.root)
+        self.listArea = ListArea(self.root,self)
         self.listArea.onTimeClicked=self.gotoTime
         self.listArea.pack(side="top",fill="both",expand=True)
-
-            # create a frame for the buttons
+        self.progressbar = tk.Scale(
+            self.root,
+            from_=0,
+            to=100,
+            orient=tk.HORIZONTAL,
+            length=400,
+            command=self.seek
+        )
+        self.progressbar.pack()
+        
+            # create three buttons and add them to the button frame
+        self.input = TextEditorFrame(self.root)
+        self.input.text_event = self.get_text
+        self.input.pack(side="left",pady=10)
+        self.input.focusIn=self.pauseVideo
+        self.addMenu()
+        """
+        # create a frame for the buttons
         button_frame = tk.Frame(self.root)
         button_frame.pack(side="bottom", fill="y")
 
-            # create three buttons and add them to the button frame
-        self.input = TextEditorFrame()
-        self.input.text_event = self.get_text
-        self.input.pack(side="left",pady=10)
         button1 = tk.Button(button_frame, text="select vid", padx=10,command=self.Getvideo)
         button1.pack(side="left", padx=10)
         button2 = tk.Button(button_frame, text="Play vid", padx=10,command=self.Playvideo)
         button2.pack(side="left", padx=10)
         button3 = tk.Button(button_frame, text="save PDF", padx=10,command=self.export_as_pdf)
         button3.pack(side="left", padx=10)
+        """
+        
+        self.reader.data.player.event_manager().event_attach(
+            vlc.EventType.MediaPlayerTimeChanged,
+            self.update_progressbar
+        )
+        self.root.bind("<space>",self.tougleVideo)
+        self.root.bind("<Control-]>",self.speed)
+        self.root.bind("<Control-[>",self.slow)
         self.root.bind("<Control-s>", self.take_screen)
         self.root.bind("<Configure>",self.resize)
         #self.root.bind("<ButtonRelease-1>",self.onrelease)
-      
+
+    def addMenu(self):
+        menubar = Menu(self.root)
+        # create the file_menu
+        file_menu = Menu(
+            menubar,
+            tearoff=0
+        )
+        menubar.add_cascade(
+            label="File",
+            menu=file_menu
+        )
+        file_menu.add_command(label='Open vid',command=self.Getvideo)
+        file_menu.add_command(label='Run',command=self.Playvideo)
+        file_menu.add_command(label='Export PDF',state='disabled',command=self.export_as_pdf)
+        file_menu.add_command(label='Export PNG',command=self.export_as_pdf)
+        file_menu.add_separator()
+        
+        # add Exit menu item
+        file_menu.add_command(
+            label='Exit',
+            command=self.root.destroy
+        )
+
+        # add the File menu to the menubar
+        
+        # create the Help menu
+        help_menu = Menu(
+            menubar,
+            tearoff=0
+        )
+        menubar.add_cascade(
+            label="ABOUT",
+            menu=help_menu
+        )
+
+        help_menu.add_command(label='Welcome')
+        help_menu.add_command(label='About...')
+
+        self.root.config(menu=menubar)  
+        
+    def update_progressbar(self, event):
+        position = self.reader.data.player.get_position()
+        if position is not None:
+            self.progressbar.set(int(position * 100))
+    def seek(self, value):
+        self.reader.data.player.set_position(float(value) / 100)
+    def tougleVideo(self,event):
+        if not self.videoOpend:return
+        
+        if self.paused:
+            self.playVideo()
+        else:
+            self.pauseVideo()
+    def speedCTRL(self,UD):
+
+        pass
+    def pauseVideo(self):
+        if not self.videoOpend:return
+        self.paused=True
+        self.reader.data.player.pause()
+    def playVideo(self):
+        if not self.videoOpend:return
+        self.paused=False
+        self.reader.data.player.play()
     def Getvideo(self):
         self.reader.data.Getvideo()
         self.load_list()
+        self.videoOpend=True
     def Playvideo(self):
+        if not self.videoOpend:return
+        
         self.input.open_text()
-        self.reader.data.play_video()
+        player_window = tk.Toplevel(self.root)
+
+        # create a frame widget to hold the media player
+        #player_frame = tk.Frame(player_window)
+        
+        #player_frame.pack()
+        #w = tk.Button(player_frame,text="sssssssssssssssssssssssssss")
+        #w.pack()
+        self.reader.data.play_video(self.root)
     def gotoTime(self,time):
-        print(time)
+        if not self.videoOpend:return
+        
         self.reader.data.player.set_time(time)
     def take_screen(self,event):
+        if not self.videoOpend:return
+        
         image,time = self.reader.take_screenshot(event)
-        self.data.append(image)
+        #self.data.append(image)
         img = image.copy()
         self.listArea.render_item(img,time,self.width)
         self.render_items()
@@ -719,10 +828,17 @@ class APP:
             self.resize_ = False
         pass
     def speed(self,event):
-        if(self.reader.data.player.get_rate()<4):
+        if not self.videoOpend:return
+        
+        if(self.reader.data.player.get_rate()<4 and self.reader.data.player.get_media() is not None) :
+            print(self.reader.data.player.get_rate())
             self.reader.data.player.set_rate(self.reader.data.player.get_rate()+0.1)
     def slow(self,event):
-        if(self.reader.data.player.get_rate()>0):
+        if not self.videoOpend:return
+        
+        if(self.reader.data.player.get_rate()>0 and  self.reader.data.player.get_media() is not None):
+            
+            print(self.reader.data.player.get_rate())
             self.reader.data.player.set_rate(self.reader.data.player.get_rate()-0.1)
     def resize(self,event):
         if type(event.widget) == type(self.root):
@@ -736,7 +852,7 @@ class APP:
         print("User input: ", self.input.user_input)
         self.data.append(self.input.user_input)
         time = self.reader.data.player.get_time()
-
+        self.playVideo()
         self.listArea.render_item(self.input.user_input,time,tags=self.input.tags)
         self.render_items()
         self.save_list()
@@ -761,13 +877,15 @@ class APP:
     
     def load_list(self):
         file = self.getDir()
-        with open(file, "rb") as f:
-            data=pickle.load(f)
-            for e in data:
-                element = canvas_holder()
-                element.data = e
-                self.listArea.list.append(element)
-            self.listArea.restore(self)
+        if os.path.isfile(file) and os.path.getsize(file) > 0:      
+            with open(file, "rb") as f:
+                data=pickle.load(f)
+                for e in data:
+                    element = canvas_holder()
+                    element.data = e
+                    self.listArea.list.append(element)
+                self.listArea.restore(self)
+        
     def export_as_pdf(self):
 
         canvas = self.listArea.print_pdf(1200)
