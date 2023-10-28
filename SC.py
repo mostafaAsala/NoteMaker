@@ -13,8 +13,9 @@ from reportlab.pdfgen import canvas as pdfcanvas
 from reportlab.lib.pagesizes import letter
 from tkinter import Menu
 import os
+import threading
 """
-# Create a VLC instance
+# Create a VLC instance11
 vlc_instance = vlc.Instance()
 
 # Create a media player
@@ -63,8 +64,8 @@ class VideoData:
     def __init__(self) -> None:
         self.directory =""    
         self.name = ""
-        self.vlc_instance = vlc.Instance('--no-xlib')
-        self.player = self.vlc_instance.media_player_new()
+        self.vlc_instance:vlc.Instance = vlc.Instance()
+        self.player:vlc.MediaPlayer = self.vlc_instance.media_player_new()
         self.media =""
 
         pass
@@ -76,17 +77,18 @@ class VideoData:
         
         print(self.name)
     def play_video(self,frame):
-        self.setWindow(frame)
+        #self.setWindow(frame)
         self.player.play()
-    def setWindow(self,player_frame):
+    
+    """def setWindow(self,player_frame):
         player_frame.update()
         player_handle = player_frame.winfo_id()
         self.player.set_xwindow(player_handle)
-
+    """
     def Select_video(self,player_frame=None):
         self.Getvideo()
-        if player_frame==None:
-            self.setWindow(player_frame)
+        #if player_frame==None:
+        #    self.setWindow(player_frame)
         self.play_video()
         pass
 
@@ -101,6 +103,8 @@ class VLC_Reader:
         self.screenshots = []    
         self.data = VideoData()
         self.rate = 1
+        self.SSnumber=0
+        self.busy = False
         pass
 
     def changespeed(self,dir):
@@ -109,20 +113,28 @@ class VLC_Reader:
         
 
     def take_screenshot(self,event):
-        screen = self.data.player.video_take_snapshot(0, 'screenshot.png', 0, 0)
-        time = self.data.player.get_time()
-        if(screen==0):
-            image = Image.open('screenshot.png')
-            return image,time
-"""
-    def on_press(self,key):
+        if self.busy==True:return None,None
+        self.busy=True
+        print("f0")
         try:
-            if key == keyboard.Key.ctrl_l and keyboard.KeyCode.from_char('s'):
+            self.data.player:vlc.MediaPlayer
+            print(self.data.player)
+            #screen = self.data.player.video_take_snapshot(0, 'screens\screenshot{0}.png'.format(self.SSnumber), 0, 0)
+            screen = self.data.player.video_take_snapshot(0, 'screens\screenshot.png', 0, 0)
+            print(self.SSnumber)
+            time = self.data.player.get_time()
+            if(screen==0):
+                image = Image.open('screens\screenshot{}.png'.format(self.SSnumber))
                 
-                self.take_screenshot(key)
-        except AttributeError:
-            pass
-"""
+                self.SSnumber+=1
+                self.busy=False
+                return image,time
+        except Exception as e:
+            self.busy=False
+            print(e)
+        self.busy=False
+        
+
 class canvas_holder:
     def __init__(self) -> None:
         self.container=None
@@ -305,8 +317,6 @@ class ListArea(tk.Frame):
    
 
     def render_item(self,item,time,width=None,tags=None):
-        print("tags = ",tags)
-        print(type(item))
         d = canvas_holder()
         d.data.time = time
         sec =time/1000
@@ -320,7 +330,7 @@ class ListArea(tk.Frame):
                 index=i+1
             else :
                 break
-        
+        print("Index: ",index)
 
         self.list.insert(index,d)        
         container =tk.Frame(self.scrollable_frame , bd=5,relief="groove")
@@ -541,9 +551,9 @@ class TextEditor(tk.Frame):
 
         
         self.textArea = Text(self, font=f'{self.fontName} 15', relief=FLAT,height=2)
+        
         self.textArea.pack(fill=BOTH, expand=TRUE, padx=self.padding, pady=self.padding)
         self.textArea.bind("<Key>", self.keyDown)
-        self.textArea.bind('<FocusIn>',self.on_select)
         self.resetTags()
     def on_select(self,event):
         print("select")
@@ -562,6 +572,7 @@ class TextEditor(tk.Frame):
 
 
     def keyDown(self,event=None):
+        print(self.textArea.focus_get())
         return
         self.title(f'{"Editor"} - *{"filePath"}')
 
@@ -584,7 +595,7 @@ class TextEditorFrame(tk.Frame):
         self.user_input=""
         # Create the text field
         self.whole = tk.Frame(self)
-        
+        self.isSelected = False
         self.text = TextEditor(self)
         #self.text.pack(side="top", fill="x")
         self.submit_button = ttk.Button(self.whole, text="Enter", command=self.submit_text)
@@ -595,7 +606,11 @@ class TextEditorFrame(tk.Frame):
         comwidth =4
         
         self.text.textArea.bind("<FocusIn>",lambda event: self.onFocus())
-        self.text.textArea.bind("<FocusOut>",lambda event: print("Text widget lost focus"))
+        self.text.textArea.bind("<FocusOut>",lambda event:(
+                                    print("not good"),
+                                    self.onLoseFocus()
+                                    )
+                                    )
         self.text.textArea.bind("<Control-b>", lambda event: self.text.tagToggle('bold'))
         
         self.text.textArea.bind("<Control-i>", lambda event: self.text.tagToggle('italic'))
@@ -641,11 +656,27 @@ class TextEditorFrame(tk.Frame):
         textFC.bind('<<ComboboxSelected>>', self)
         textFC.current(0)
         textFC.pack(fill=tk.X, padx=0, pady=0,side="right")
-          
+
+    def is_cursor_inside_text_widget(self,x, y):
+    # Check if the cursor position (x, y) is inside the Text widget
+        text_x1, text_y1, text_x2, text_y2 = self.text.textArea.bbox("insert")
+        return (text_x1 <= x <= text_x2) and (text_y1 <= y <= text_y2)
+
     def onFocus(self):
+        
+        self.text.textArea["state"]= 'normal'
         self.focusIn()
+        self.isSelected = True
+        
         self.whole.pack()
+    def onLoseFocus(self):
+        self.text.textArea.focus=False
+        
+        self.text.textArea["state"]= 'disabled'
+        self.isSelected = False
+        
     def open_text(self):
+
         self.text.pack(side="top", fill="x")
     def submit_text(self):
         self.user_input = self.text.textArea.get("1.0",'end-1c')
@@ -673,6 +704,7 @@ class APP:
         self.resize_ = False
         self.redrawFlag=False
         self.root = tk.Tk()
+        self.ProgressVal=0
         self.root.minsize(100,400)
         self.reader = VLC_Reader()
         self.root.title('noteBook')
@@ -681,7 +713,17 @@ class APP:
         self.paused = False
         self.videoOpend=False
         self.create_widgets()
+        self.root.bind("<Button-1>", lambda event :self.onClick(event))
+
         self.root.mainloop()
+
+    def onClick(self,event):
+        x,y = self.root.winfo_pointerxy()
+        widget = self.root.winfo_containing(x,y)            # identify the widget at this location
+        print(widget,type(widget))
+        if (str(widget) == ".!texteditorframe.!texteditor.!text")==False:        # if the mouse is not over the text widget
+            print("from root")
+            self.root.focus()                               # focus on root
         
     def create_widgets(self):
         self.listArea = ListArea(self.root,self)
@@ -690,13 +732,21 @@ class APP:
         self.progressbar = tk.Scale(
             self.root,
             from_=0,
-            to=100,
+            to=1000,
             orient=tk.HORIZONTAL,
             length=400,
-            command=self.seek
+            command=self.seek,
+            showvalue=False
         )
         self.progressbar.pack()
         
+        controlBar = tk.Frame(self.root)
+        controlBar.pack()
+        self.time_label = tk.Label(controlBar)
+        self.time_label.pack(side=LEFT)
+        tk.Button(controlBar,text="resume/pause",command=lambda :self.tougleVideo(None,pybass=True)).pack()
+
+
             # create three buttons and add them to the button frame
         self.input = TextEditorFrame(self.root)
         self.input.text_event = self.get_text
@@ -723,9 +773,19 @@ class APP:
         self.root.bind("<space>",self.tougleVideo)
         self.root.bind("<Control-]>",self.speed)
         self.root.bind("<Control-[>",self.slow)
-        self.root.bind("<Control-s>", self.take_screen)
+        self.root.bind("<Control-s>", self.Screen_thread)
         self.root.bind("<Configure>",self.resize)
         #self.root.bind("<ButtonRelease-1>",self.onrelease)
+    def update_time_label(self):
+        def format_time(seconds):
+            hours, remainder = divmod(seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+        current_time = self.reader.data.player.get_time() // 1000  # Convert milliseconds to seconds
+        formatted_time = format_time(current_time)
+        self.time_label.config(text=f"{formatted_time}")
+        self.root.after(1000, self.update_time_label)  # Update every 1 second
 
     def addMenu(self):
         menubar = Menu(self.root)
@@ -768,14 +828,20 @@ class APP:
         self.root.config(menu=menubar)  
         
     def update_progressbar(self, event):
+        print("onUpdate")
         position = self.reader.data.player.get_position()
+        self.ProgressVal = int(position * 1000)
         if position is not None:
-            self.progressbar.set(int(position * 100))
+            self.progressbar.set(self.ProgressVal)
+            self.update_time_label()
+
     def seek(self, value):
-        self.reader.data.player.set_position(float(value) / 100)
-    def tougleVideo(self,event):
+        if int(value)!=self.ProgressVal:
+            self.reader.data.player.set_position(float(value) / 1000)
+            self.update_time_label()
+    def tougleVideo(self,event,pybass=False):
         if not self.videoOpend:return
-        
+        if self.input.isSelected and pybass==False:return
         if self.paused:
             self.playVideo()
         else:
@@ -793,13 +859,16 @@ class APP:
         self.reader.data.player.play()
     def Getvideo(self):
         self.reader.data.Getvideo()
-        self.load_list()
-        self.videoOpend=True
-    def Playvideo(self):
-        if not self.videoOpend:return
+        if os.path.isfile(self.reader.data.name):self.videoOpend=True
         
+        self.load_list()
+        
+    def Playvideo(self):
+
+        if not self.videoOpend:return
+        print("play vid")
         self.input.open_text()
-        player_window = tk.Toplevel(self.root)
+        #player_window = tk.Toplevel(self.root)
 
         # create a frame widget to hold the media player
         #player_frame = tk.Frame(player_window)
@@ -812,16 +881,22 @@ class APP:
         if not self.videoOpend:return
         
         self.reader.data.player.set_time(time)
+    def Screen_thread(self,event):
+        #thread = threading.Thread(target=self.take_screen,args=(event,))
+        #thread.run()
+        #thread.join()
+        self.take_screen(event)
     def take_screen(self,event):
         if not self.videoOpend:return
         
         image,time = self.reader.take_screenshot(event)
-        #self.data.append(image)
+        if image==None:return
+        self.data.append(image)
         img = image.copy()
         self.listArea.render_item(img,time,self.width)
         self.render_items()
         self.save_list()
-    
+       
     def onrelease(self,event):
         if self.resize_ == True:
             #self.render_items()
@@ -877,8 +952,11 @@ class APP:
     
     def load_list(self):
         file = self.getDir()
+
         if os.path.isfile(file) and os.path.getsize(file) > 0:      
-            with open(file, "rb") as f:
+            
+            with open(file, "+rb") as f:
+                print("opened list")
                 data=pickle.load(f)
                 for e in data:
                     element = canvas_holder()
